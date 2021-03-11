@@ -1,0 +1,61 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - https://cloudify.co/spec/cloudify/5.1.2/types.yaml
+  - plugin:cloudify-terraform-plugin
+
+inputs:
+  tf_installation_source:
+    type: string
+    constraints:
+      - valid_values:
+          - https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
+          - https://releases.hashicorp.com/terraform/0.14.4/terraform_0.14.4_linux_amd64.zip
+    default: https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
+
+node_templates:
+  terraform:
+    type: cloudify.nodes.terraform
+    properties:
+      resource_config:
+        installation_source: { get_input: tf_installation_source }
+        # installation_source: https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
+
+  authenticator:
+    type: cloudify.nodes.Root
+    relationships:
+      - type: cloudify.relationships.depends_on
+        target: terraform
+  
+  terraform_module:
+    type: cloudify.nodes.terraform.Module
+    properties:
+      resource_config:
+        environment_variables:
+          ARM_SUBSCRIPTION_ID: { get_attribute: [authenticator, azure_subscription_id] }
+          ARM_TENANT_ID: { get_attribute: [authenticator, azure_tenant_id] }
+          ARM_CLIENT_ID: { get_attribute: [authenticator, azure_client_id] }
+          ARM_CLIENT_SECRET: { get_attribute: [authenticator, azure_client_secret] }
+        variables:
+          azure_location_name: { get_input: azure_location_name }
+          rg_name: { get_input: name }
+          rg_tags: { get_input: rg_tags }
+          sg_name: { concat: [ { get_input: name } , '-cfy-agents' ] }
+          vnet_name: { concat: [ { get_input: name }, '-vnet' ] }
+          vnet_tags: { get_input: vn_tags }
+          cidr_block: { get_input: cidr_block }
+          subnet_1_name: { concat: [ { get_input: name }, '-subnet-1' ] }
+          subnet_1_cidr: { get_input: subnet_1_cidr }
+          subnet_2_name: { concat: [ { get_input: name }, '-subnet-2' ] }
+          subnet_2_cidr: { get_input: subnet_2_cidr }
+          sa_name: { concat: [ { get_input: name }, 'sa' ] }
+        source:
+          location: https://github.com/jakubcierlik/eaas-terraform/archive/main.zip
+    relationships:
+      - target: authenticator
+        type: cloudify.relationships.depends_on
+      - target: terraform
+        type: cloudify.terraform.relationships.run_on_host
+
+capabilities:
+# put some capabilities here
