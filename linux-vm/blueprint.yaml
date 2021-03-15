@@ -5,7 +5,6 @@ imports:
   - https://cloudify.co/spec/cloudify/5.1.2/types.yaml
   - plugin:cloudify-terraform-plugin
 
-
 inputs:
 
   tf_installation_source:
@@ -55,23 +54,28 @@ inputs:
   
   vm_name:
     type: string
-    required: false
+    default: azsapapp12s
 
   az_resource_group_name:
     type: string
+    default: rg-cfin-auto-sbx-001
 
   tags:
     type: dict
     required: false
 
-  vm_info:
-    type: dict
-
   disks:
     type: dict
+    required: false
 
   role:
     type: string
+    constraints:
+      - valid_values:
+        - generic
+        - app
+        - db
+    default: app
 
   ppg_id:
     type: string
@@ -79,6 +83,7 @@ inputs:
 
   ssh_public_data:
     type: string
+    default: { get_secret: ssh_public_data }
 
   disk_enc:
     type: dict
@@ -91,9 +96,10 @@ inputs:
 
   subnet:
     type: dict
-
-  bootstrap_settings:
-    type: dict
+    default:
+      name: "snet-cfin-sbx-eun-001"
+      resource_group_name: "rg-cfin-inf-sbx-001"
+      vnet_name: "vnet-cfin-sbx-eun-001"
   
 
 node_templates:
@@ -129,16 +135,43 @@ node_templates:
           vm_name: { get_input: vm_name }
           az_resource_group_name: { get_input: az_resource_group_name }
           tags: { get_input: tags }
-          vm_info: { get_input: vm_info }
+          vm_info:
+            os_image:
+              publisher: "redhat"
+              offer: "rhel-sap-apps"
+              sku: "82sapapps-gen2"
+              version: "latest"
+            storage_os_disk:
+              caching: "ReadWrite"
+              create_option: "FromImage"
+              managed_disk_type: "StandardSSD_LRS"
+            os_profile:
+              admin_username: "azadmin"
+              admin_password: { get_attribute: [authenticator, local_admin_passwd] }
+            general:
+              size: "Standard_D4ds_v4"
+              zone: 3 # Must be null if not set
+              role: { get_input: role }
           disks: { get_input: disks }
           role: { get_input: role }
           ppg_id: { get_input: ppg_id }
-          ssh_public_data: { get_input: ssh_public_data }
+          ssh_public_data: { get_secret: ssh_public_data }
           disk_enc: { get_input: disk_enc }
           subnet: { get_input: subnet }
-          bootstrap_settings: { get_input: bootstrap_settings }
+          bootstrap_settings: { get_secret: bootstrap_settings }
         source:
-          location: PUT TERRAFORM TEMPLATE LOCATION HERE (URL)
+          location: resources/terraform-azurerm-teva-vm-linux.zip
+        backend:
+          name: azurerm
+          options:
+            resource_group_name: "rg-pah-inf-prod-001" # Add this because of https://github.com/hashicorp/terraform/issues/23515
+            storage_account_name: "stgpah1a4jvdokprod001"
+            container_name: "tfstate"
+            key: "${path_relative_to_include()}/vm.terraform.tfstate"
+            use_msi: true
+            subscription_id: { get_attribute: [authenticator, arm_subscription_id] }
+            tenant_id: { get_attribute: [authenticator, arm_tenant_id] }
+        # provider: TODO
     relationships:
       - target: authenticator
         type: cloudify.relationships.depends_on

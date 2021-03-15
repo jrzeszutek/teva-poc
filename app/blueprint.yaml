@@ -4,143 +4,22 @@ tosca_definitions_version: cloudify_dsl_1_3
 imports:
   - https://cloudify.co/spec/cloudify/5.1.2/types.yaml
   - plugin:cloudify-ansible-plugin
-
-
-inputs:
-
-  app_name:
-    type: string
-
-  linux_vm_blueprint_name:
-    type: string
-    default: linux-vm
-
-  tf_installation_source:
-    type: string
-    constraints:
-      - valid_values:
-          - https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
-          - https://releases.hashicorp.com/terraform/0.14.4/terraform_0.14.4_linux_amd64.zip
-    default: https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
-
-  az_location:
-    type: string
-    constraints:
-      - valid_values:
-        - eastasia
-        - southeastasia
-        - centralus
-        - eastus
-        - eastus2
-        - westus
-        - northcentralus
-        - southcentralus
-        - northeurope
-        - westeurope
-        - japanwest
-        - japaneast
-        - brazilsouth
-        - australiaeast
-        - australiasoutheast
-        - southindia
-        - centralindia
-        - westindia
-        - canadacentral
-        - canadaeast
-        - uksouth
-        - ukwest
-        - westcentralus
-        - westus2
-        - koreacentral
-        - koreasouth
-        - francecentral
-        - francesouth
-        - australiacentral
-        - australiacentral2
-        - southafricanorth
-        - southafricawest
-  
-  vm_name:
-    type: string
-    required: false
-
-  az_resource_group_name:
-    type: string
-
-  tags:
-    type: dict
-    required: false
-
-  vm_info:
-    type: dict
-
-  disks:
-    type: dict
-
-  role:
-    type: string
-
-  ppg_id:
-    type: string
-    required: false
-
-  ssh_public_data:
-    type: string
-
-  disk_enc:
-    type: dict
-    default:
-      KeyVaultURL: ""
-      KeyVaultResourceId: ""
-      KeyEncryptionKeyURL: ""
-      KekVaultResourceId: ""
-      KeyEncryptionAlgorithm: ""
-
-  subnet:
-    type: dict
-
-  bootstrap_settings:
-    type: dict
+  - VM--blueprint:linux-vm
   
 
 node_templates:
-  
-  vm_deployment:
-    type: cloudify.nodes.ServiceComponent
-    properties:
-      resource_config:
-        blueprint:
-          id: { get_input: linux_vm_blueprint_name }
-          external_resource: true
-        deployment:
-          auto_inc_suffix: true
-          id: { get_input: app_name }
-          inputs:
-            tf_installation_source: { get_input: tf_installation_source }
-            az_location: { get_input: az_location }
-            vm_name: { get_input: vm_name }
-            az_resource_group_name: { get_input: az_resource_group_name }
-            tags: { get_input: tags }
-            vm_info: { get_input: vm_info }
-            disks: { get_input: disks }
-            role: { get_input: role }
-            ppg_id: { get_input: ppg_id }
-            ssh_public_data: { get_input: ssh_public_data }
-            disk_enc: { get_input: disk_enc }
-            subnet: { get_input: subnet }
-            bootstrap_settings: { get_input: bootstrap_settings }
 
   vm:
     type: cloudify.nodes.Compute
     properties:
-      ip: { get_attribute: [ vm_deployment, capabilities, ip ] }
+      ip: { get_attribute: [ VM--terraform_module, resources, vm, instances, 0, attributes, ip ] }
       agent_config:
         install_method: none
-        key: { get_attribute: [ vm_deployment, capabilities, private_key_content ] }
-        user: { get_attribute: [ vm_deployment, capabilities, username ] }
+        key: { get_attribute: [ VM--terraform_module, resources, vm, instances, 0, attributes, private_key_content ] }
+        user: { get_attribute: [ VM--terraform_module, resources, vm, instances, 0, attributes, username ] }
     relationships:
       - type: cloudify.relationships.depends_on
-        target: vm_deployment
+        target: VM--terraform_module
 
   ansible_playbook:
     type: cloudify.nodes.ansible.Playbook
@@ -153,4 +32,4 @@ node_templates:
 
 capabilities:
   ip:
-    value: { get_attribute: [ vm_deployment, capabilities, ip ] }
+    value: { get_attribute: [ vm, ip ] }
