@@ -11,8 +11,8 @@ inputs:
     type: string
     constraints:
       - valid_values:
-          - https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
-          - https://releases.hashicorp.com/terraform/0.14.4/terraform_0.14.4_linux_amd64.zip
+        - https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
+        - https://releases.hashicorp.com/terraform/0.14.4/terraform_0.14.4_linux_amd64.zip
     default: https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
 
   az_location:
@@ -108,7 +108,6 @@ node_templates:
     properties:
       resource_config:
         installation_source: { get_input: tf_installation_source }
-        # installation_source: https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip
 
   authenticator:
     type: cloudify.nodes.Root
@@ -125,11 +124,11 @@ node_templates:
     type: cloudify.nodes.terraform.Module
     properties:
       resource_config:
-        environment_variables:
-          arm_subscription_id: { get_attribute: [authenticator, arm_subscription_id] }
-          arm_tenant_id: { get_attribute: [authenticator, arm_tenant_id] }
-          local_admin_passwd: { get_attribute: [authenticator, local_admin_passwd] }
-          storage_account_key: { get_attribute: [authenticator, storage_account_key] }
+        environment_variables: # dynamically generated provider
+          ARM_SUBSCRIPTION_ID: { get_attribute: [authenticator, arm_subscription_id] }
+          ARM_TENANT_ID: { get_attribute: [authenticator, arm_tenant_id] }
+          ARM_USE_MSI: true
+          ARM_SKIP_PROVIDER_REGISTRATION: true
         variables:
           az_location: { get_input: az_location }
           vm_name: { get_input: vm_name }
@@ -160,18 +159,22 @@ node_templates:
           subnet: { get_input: subnet }
           bootstrap_settings: { get_secret: bootstrap_settings }
         source:
-          location: resources/terraform-azurerm-teva-vm-linux.zip
+          location: ssh.dev.azure.com:v3/Teva-CCOE/Infra/terraform-azurerm-teva-vm-linux
+          username: { get_secret: git_username }
+          password: { get_secret: git_password }
         backend:
           name: azurerm
           options:
             resource_group_name: "rg-pah-inf-prod-001" # Add this because of https://github.com/hashicorp/terraform/issues/23515
             storage_account_name: "stgpah1a4jvdokprod001"
             container_name: "tfstate"
-            key: "${path_relative_to_include()}/vm.terraform.tfstate"
+            key: # test it!
+              concat:
+              - { get_input: role }
+              - /vm.terraform.tfstate
             use_msi: true
             subscription_id: { get_attribute: [authenticator, arm_subscription_id] }
             tenant_id: { get_attribute: [authenticator, arm_tenant_id] }
-        # provider: TODO
     relationships:
       - target: authenticator
         type: cloudify.relationships.depends_on
