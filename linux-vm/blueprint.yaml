@@ -51,6 +51,7 @@ inputs:
         - australiacentral2
         - southafricanorth
         - southafricawest
+    default: northeurope
   
   vm_name:
     type: string
@@ -63,10 +64,12 @@ inputs:
   tags:
     type: dict
     required: false
+    default: {}
 
   disks:
     type: dict
     required: false
+    default: {}
 
   role:
     type: string
@@ -80,6 +83,7 @@ inputs:
   ppg_id:
     type: string
     required: false
+    default: ""
 
   ssh_public_data:
     type: string
@@ -100,6 +104,15 @@ inputs:
       name: "snet-cfin-sbx-eun-001"
       resource_group_name: "rg-cfin-inf-sbx-001"
       vnet_name: "vnet-cfin-sbx-eun-001"
+
+  sap:
+    type: string
+    constraints:
+      - valid_values:
+        - ppg
+        - app
+        - db
+    default: app
   
 
 node_templates:
@@ -109,6 +122,20 @@ node_templates:
       resource_config:
         installation_source: { get_input: tf_installation_source }
 
+  prerequisites_installer:
+    type: cloudify.nodes.Root
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create: 
+          implementation: scripts/install_akeyless.py
+          executor: central_deployment_agent
+        configure: 
+          implementation: scripts/configure_akeyless.py
+          executor: central_deployment_agent
+        start: 
+          implementation: scripts/install_jq.py
+          executor: central_deployment_agent
+
   authenticator:
     type: cloudify.nodes.Root
     interfaces:
@@ -116,9 +143,12 @@ node_templates:
         start: 
           implementation: scripts/get_auth_credentials.py
           executor: central_deployment_agent
+          inputs:
+            VAULT_ADDR: address
+            VAULT_TOKEN: token
     relationships:
       - type: cloudify.relationships.depends_on
-        target: terraform
+        target: prerequisites_installer
   
   terraform_module:
     type: cloudify.nodes.terraform.Module
@@ -159,9 +189,10 @@ node_templates:
           subnet: { get_input: subnet }
           bootstrap_settings: { get_secret: bootstrap_settings }
         source:
-          location: ssh.dev.azure.com:v3/Teva-CCOE/Infra/terraform-azurerm-teva-vm-linux
-          username: { get_secret: git_username }
-          password: { get_secret: git_password }
+          location: resources/terraform-azurerm-teva-vm-linux.zip
+          # location: ssh.dev.azure.com:v3/Teva-CCOE/Infra/terraform-azurerm-teva-vm-linux
+          # username: { get_secret: git_username }
+          # password: { get_secret: git_password }
         backend:
           name: azurerm
           options:
@@ -170,7 +201,7 @@ node_templates:
             container_name: "tfstate"
             key: # test it!
               concat:
-              - { get_input: role }
+              - { get_input: sap }
               - /vm.terraform.tfstate
             use_msi: true
             subscription_id: { get_attribute: [authenticator, arm_subscription_id] }
